@@ -42,7 +42,7 @@ def parse_file_with_plumber(statement_path: str):
 
 def parse_file_with_camelot(path: str):
   statement_path = get_path(path)
-  tables = camelot.read_pdf(statement_path, pages="all")
+  tables = camelot.read_pdf(statement_path, pages="all", flavor="lattice", process_background=True)
   store = []
   prev_balance = None 
   for ind, table in enumerate(tables[1:]):
@@ -65,8 +65,35 @@ def parse_file_with_camelot(path: str):
   print(final_df.describe())
   print(final_df.tail())
   print(f"prev balance: {prev_balance}")
-  total_cred_debit = final_df["amount"].sum()
-  print(f"total credit debit: {total_cred_debit}")
+  total_debit = final_df.loc[final_df["amount"] > 0, "amount"].sum()
+  total_credit = final_df.loc[final_df["amount"] < 0, "amount"].sum()
+  print(f"total credit {total_credit} total debit {total_debit} total {total_debit + total_credit}")
+
+  final_df.to_csv("./july.csv", index=False)
+
+
+def parse_csv(statement_path: str):
+  statement_path = get_path(statement_path)
+  df = pd.read_csv(statement_path, skip_blank_lines=True, skipfooter=6, header=2)
+  df = df.rename(columns={"Date": "date", "DESCRIPTION": "description", "Foreign Currency Amount": "fca", "SGD Amount": "amount"})
+
+  # clean date
+  df['date'] = df["date"].str.strip("\t").str.strip(" ")
+  df['date'] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+
+  # clean credit and debit
+  df.loc[df["amount"].str.contains("DR"), "amount"] = df["amount"].str.removesuffix("DR").str.removeprefix("SGD").str.strip(" ")
+  df.loc[df["amount"].str.contains("CR"), "amount"] = "-" + df["amount"].str.removesuffix("CR").str.removeprefix("SGD").str.strip(" ")
+  df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+
+  df = df[["date", "description", "amount"]]
+
+  print(df.head())
+  print(df.describe())
+  print(df.tail())
+  total_debit = df.loc[df["amount"] > 0, "amount"].sum()
+  total_credit = df.loc[df["amount"] < 0, "amount"].sum()
+  print(f"total credit {total_credit} total debit {total_debit} total {total_debit + total_credit}")
 
 
 def main():
@@ -76,7 +103,8 @@ def main():
   args = parser.parse_args()
   
   # parse_file_with_plumber(args.statement_path)
-  parse_file_with_camelot(args.statement_path)
+  # parse_file_with_camelot(args.statement_path)
+  parse_csv(args.statement_path)
 
 
 if __name__ == "__main__":
